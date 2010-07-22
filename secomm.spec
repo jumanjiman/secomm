@@ -31,6 +31,7 @@ the following daemons: DAEMON1, DAEMON2, and DAEMON3
 %install
 rm -rf %{buildroot}
 mkdir -p %{buildroot}/usr/bin
+install -m755 src/secomm %{buildroot}/usr/bin
 
 
 %clean
