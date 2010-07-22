@@ -1,6 +1,6 @@
 Name:		secomm
 Version:	0.1
-Release:	1%{?dist}
+Release:	2%{?dist}
 Summary:	Show selinux types that have a given permission
 
 Group:		Admin
@@ -46,4 +46,7 @@ rm -rf %{buildroot}
 
 
 %changelog
+* Thu Jul 22 2010 Paul Morgan <jumanjiman@gmail.com> 0.1-2
+- new package built with tito
+
 
