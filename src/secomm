@@ -1,39 +1,11 @@
 #!/bin/bash
-# Copyright 2008 Paul Morgan <pmorgan@redhat.com>
+# Copyright 2008 Paul Morgan <jumanjiman@gmail.com>
 # LICENSE: GNU General Public License v2
 
 # This script is not included in any Red Hat-support distribution.
 # Please provide feedback or comments to the author via email.
 
 PROG=$(basename $0)
-
-# -------------------------------------------------------------
-# Functionality:
-#   Show the intersection of SELinux target types on which
-#   the given subject types share a common permission.
-#
-#   This script is similar in concept and operation to
-#   the `comm -1 -2' command, part of GNU coreutils.
-#   It differs from GNU comm in that it uses SELinux types
-#   as inputs instead of files. The output records are
-#   SELinux target types.
-#   Additionally, secomm allows you to use an arbitrary number 
-#   (1 or more) of SELinux subject types/domains as input.
-#   GNU comm limits you to 2 input files.
-#   The output is the list of target types that are common
-#   to each of the input domains and constrained to the specified
-#   SELinux permission(s) and object class(es).
-#
-# Intended purpose:
-#   What target type might I choose for my file or directory
-#   if I need the file to be accessible for PERMISSION
-#   from the following daemons: DAEMON1, DAEMON2, and DAEMON3
-#
-# Example:
-#   I need a directory to be writable by smbd, vsftpd, and nfsd.
-#   What target types are writable by all 3 daemons?
-#       secomm -c dir -p write smbd_t ftpd_t nfsd_t
-# -------------------------------------------------------------
 
 function synopsis() {
   cat >&2 <<- EOF
