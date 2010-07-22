@@ -1,0 +1,26 @@
+Functionality
+=============
+
+I'm using SELinux in enforcing mode, and 
+I need a directory to be writable by `smbd`, `vsftpd`, and `nfsd`.
+What target types are writable by all three daemons?
+
+----
+secomm -c dir -p write smbd_t ftpd_t nfsd_t
+----
+
+In other words, what target type might I choose for my file or
+directory if I need the file to be accessible for PERMISSION from
+the following daemons: DAEMON1, DAEMON2, and DAEMON3
+
+Show the intersection of SELinux target types on
+which the given subject types share a common permission.
+
+This script is similar in concept and operation to
+the `comm -1 -2` command, part of GNU coreutils.
+
+It differs from GNU `comm` in that it uses SELinux types
+as inputs instead of files. The output records are
+SELinux target types. The output is the list of target types that
+are common to each of the input domains and constrained to the
+specified SELinux permission(s) and object class(es).

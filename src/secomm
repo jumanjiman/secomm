@@ -1,0 +1,210 @@
+#!/bin/bash
+# Copyright 2008 Paul Morgan <pmorgan@redhat.com>
+# LICENSE: GNU General Public License v2
+
+# This script is not included in any Red Hat-support distribution.
+# Please provide feedback or comments to the author via email.
+
+PROG=$(basename $0)
+
+# -------------------------------------------------------------
+# Functionality:
+#   Show the intersection of SELinux target types on which
+#   the given subject types share a common permission.
+#
+#   This script is similar in concept and operation to
+#   the `comm -1 -2' command, part of GNU coreutils.
+#   It differs from GNU comm in that it uses SELinux types
+#   as inputs instead of files. The output records are
+#   SELinux target types.
+#   Additionally, secomm allows you to use an arbitrary number 
+#   (1 or more) of SELinux subject types/domains as input.
+#   GNU comm limits you to 2 input files.
+#   The output is the list of target types that are common
+#   to each of the input domains and constrained to the specified
+#   SELinux permission(s) and object class(es).
+#
+# Intended purpose:
+#   What target type might I choose for my file or directory
+#   if I need the file to be accessible for PERMISSION
+#   from the following daemons: DAEMON1, DAEMON2, and DAEMON3
+#
+# Example:
+#   I need a directory to be writable by smbd, vsftpd, and nfsd.
+#   What target types are writable by all 3 daemons?
+#       secomm -c dir -p write smbd_t ftpd_t nfsd_t
+# -------------------------------------------------------------
+
+function synopsis() {
+  cat >&2 <<- EOF
+	Usage: 
+	  $PROG [-p permission] [-c class] type1_t [.. typeN_t]
+	EOF
+}
+
+function caveats() {
+  cat >&2 <<- EOF
+	Caveats:
+	  The output includes types from conditional rules, so
+	  an SELinux boolean may be required for its suggestions.
+	  Specifically, \`sesearch --allow -b allow_smbd_anon_write\`
+	  reveals that the boolean must be set for Samba to
+	  write directories and files of type public_content_rw_t.
+	  The script considers all rules, including those enabled
+	  by SELinux booleans.
+
+	  This script is not included in any Red Hat-sponsored distro.
+	  It is neither supported nor provided by Red Hat.
+	EOF
+}
+
+function help() {
+  synopsis
+  cat >&2 <<-EOF
+
+	The following options may be used multiple times:
+	  -p SELinux permission, such as 'write'
+	  -c SELinux object class, such as 'fifo_file'
+	  -v verbose 
+	When -p or -c is used multiple times, the constraints
+	are combined with a logical AND. They are never OR'd.
+
+	Example:
+	  $PROG -p write -c file -c dir smbd_t ftpd_t nfsd_t
+
+	Run \`$PROG -C' for caveats to usage.
+	EOF
+}
+
+# -------------------------------------------------------------
+# init some variables
+PERMISSIONS=""
+CLASSES=""
+VERBOSITY=0
+
+# get command-line options
+while getopts "hp:c:vC" OPTION
+do
+  case $OPTION in
+    h ) help; exit 0;;
+    p ) PERMISSIONS+="${OPTARG} ";;
+    c ) CLASSES+="${OPTARG} ";;
+    v ) VERBOSITY+=1;;
+    C ) caveats; exit 0;;
+    * ) synopsis; caveats; exit 1;;
+  esac
+done
+
+# defaults if user did not specify
+[ -z "$PERMISSIONS" ] && PERMISSIONS="write"
+[ -z "$CLASSES" ]     && CLASSES="file dir"
+
+shift $(($OPTIND - 1))
+# decrements arg pointer so it points to next arg.
+# $1 now references the 1st non-option item
+
+
+# -------------------------------------------------------------
+# sanity checks
+
+if ! [ -x /bin/mktemp ]; then
+  echo "Error: missing /bin/mktemp" >&2
+  exit 1
+fi
+
+if ! [ -x /usr/bin/comm ]; then
+  echo "Error: missing /usr/bin/comm" >&2
+  exit 1
+fi
+
+COUNT=$#
+if [ $COUNT -lt 1 ]; then
+  (
+    echo "Error: must provide at least one SELinux subject type."
+    echo "Use \`seinfo -t' or \`ps -eZ' to obtain these."
+  ) >&2
+  synopsis
+  exit 1
+fi
+
+TMPDIR=/dev/shm
+if ! [ -d $TMPDIR ]; then
+  echo "Error: cannot find $TMPDIR" >&2
+  exit 1
+fi
+
+# end of sanity checks
+# -------------------------------------------------------------
+
+# make some temp files
+# left-hand side
+LHSFILE="$(mktemp -p $TMPDIR ${PROG}.XXXXXXXXX)"
+# right-hand side
+RHSFILE="$(mktemp -p $TMPDIR ${PROG}.XXXXXXXXX)"
+if [ $VERBOSITY -gt 0 ]; then
+  (
+  echo "created temp files:"
+  echo "  $LHSFILE"
+  echo "  $RHSFILE"
+  ) >&2
+fi
+
+function cleanup() {
+  (
+  rm -f $LHSFILE{,.sorted}
+  rm -f $RHSFILE{,.sorted}
+  ) >&2
+}
+trap 'cleanup' 0
+
+function get_target_types() {
+  BASECMD="sesearch --allow -s $1 -p $2 -c $3"
+  if [ $VERBOSITY -gt 0 ]; then
+    echo "$BASECMD" >&2
+  fi
+  $BASECMD | grep -v '^$' | grep -v '^Found.*rules:$' | \
+    awk '{print $3;}' | \
+    sort -u 
+}
+
+# -------------------------------------------------------------
+# do some real work
+
+# get target types for 1st domain (left-hand side)
+LHS=$1
+if [ $VERBOSITY -gt 0 ]; then
+  echo "Querying policy for targets where subject type=$LHS" >&2
+fi
+for PERM in $PERMISSIONS; do
+  for CLASS in $CLASSES; do
+    get_target_types $LHS $PERM $CLASS >> $LHSFILE
+  done
+done
+sort -u $LHSFILE > $LHSFILE.sorted
+
+# discard the domain we just queried
+shift
+
+while [ $# -gt 0 ]; do
+  # get target types for next domain (right-hand side)
+  RHS=$1
+  if [ $VERBOSITY -gt 0 ]; then
+    echo "Querying policy for targets where subject type=$RHS" >&2
+  fi
+  for PERM in $PERMISSIONS; do
+    for CLASS in $CLASSES; do
+      get_target_types $RHS $PERM $CLASS >> $RHSFILE
+    done
+  done
+  sort -u $RHSFILE > $RHSFILE.sorted
+
+  # discover the intersection and store as our new left-hand side
+  /usr/bin/comm -12 $LHSFILE.sorted $RHSFILE.sorted > $LHSFILE
+  sort -u $LHSFILE > $LHSFILE.sorted
+
+  # discard the domain we just queried
+  shift
+done
+
+# show final output
+cat $LHSFILE.sorted
