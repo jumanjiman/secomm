@@ -8,6 +8,7 @@ License:	GPLv2
 URL:		http://github.com/jumanjiman/secomm
 Source0:	%{name}-%{version}.tar.gz
 BuildRoot:	%(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
+buildarch:	noarch
 
 Requires:	coreutils
 
